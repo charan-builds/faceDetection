@@ -1,0 +1,81 @@
+# PAD-LIVE-SIM v1 — live unlock path simulation via PadSession
+# Same metrics as PAD-ISO-LAB; frame buffering aligned with recognize_live().
+# Source of truth: FL-PAD-EVAL-001
+
+protocol_id: PAD-LIVE-SIM-v1
+version: 1.0.0
+status: template
+evaluation_policy: fail_closed_v1
+
+objective: >
+  Measure PAD outcomes when frames are fed through a session buffer as in
+  production unlock, including borderline to active challenge flows.
+
+system_under_test:
+  module: src.pad_engine
+  workflow:
+    - create_pad_session
+    - add_frame  # per frame in clip, respecting sample_every_n_frames
+    - evaluate_final
+    - reset  # optional between presentations
+  settings_source: src.config.PAD_SETTINGS
+  excluded:
+    - recognize.py
+    - capture.py
+
+clips:
+  min_frames_per_presentation: 8
+  recommended_fps: 15
+  format: numbered JPEG sequence (frame_0001.jpg, ...)
+  optional_meta: meta.json per session folder
+
+pad_settings:
+  enabled: true
+  assurance_tier: standard
+  mode: passive_then_active_on_borderline
+  passive_model_id: heuristic_rgb_v1
+  min_frames_passive: 8
+  max_frames_buffer: 24
+  sample_every_n_frames: 1
+  challenge_type: head_turn_left
+  challenge_timeout_seconds: 3.0
+  head_turn_min_shift_px: 12
+
+active_challenge:
+  borderline_triggers_active: true
+  max_evaluate_calls_per_presentation: 10
+  presentation_timeout_seconds: 15
+  success_outcome: LIVE
+  failure_outcomes:
+    - ATTACK
+    - INCONCLUSIVE
+    - ERROR
+
+dataset:
+  manifest_schema: eval/datasets/_template/manifest.schema.json
+  presentation_type: clip
+  collection_id: null
+  share_manifest_with: PAD-ISO-LAB-v1
+
+# Inherits standard tier from pad_iso_lab_v1 unless overridden
+tier_gates:
+  standard:
+    apcer_max_pooled: 0.05
+    bpcer_max: 0.05
+    latency_ms_p95_max: 1200
+
+reporting:
+  template: eval/reports/template/report_template.md
+  summary_schema: eval/reports/template/summary_schema.json
+  extra_fields:
+    - active_challenge_rate
+    - median_frames_to_decision
+
+relation_to_iso_lab:
+  metrics: same APCER / BPCER
+  frame_feeding: session-accurate sequencing vs clip batch
+  active_pad: explicitly documented when mode requires
+
+notes:
+  - Use the same dataset manifest as PAD-ISO-LAB when possible.
+  - Document in lab notes when a presentation required multiple evaluate_final calls.

@@ -1,0 +1,107 @@
+# PAD-ISO-LAB v1 — primary laboratory APCER/BPCER protocol
+# Measures presentation attacks against pad_engine only (no identity matching).
+# Source of truth: FL-PAD-EVAL-001
+
+protocol_id: PAD-ISO-LAB-v1
+version: 1.0.0
+status: template
+evaluation_policy: fail_closed_v1
+
+objective: >
+  Quantify spoof acceptance (APCER) and bona fide rejection (BPCER) for the
+  configured passive model and fusion mode before ONNX or production tier promotion.
+
+system_under_test:
+  module: src.pad_engine
+  entrypoint: PadSession.evaluate_final
+  settings_source: src.config.PAD_SETTINGS
+  excluded:
+    - ai_engine.generate_embedding
+    - recognize.py
+
+# Override at run time in Phase E2 harness
+pad_settings:
+  enabled: true
+  assurance_tier: standard
+  mode: passive_then_active_on_borderline
+  passive_model_id: heuristic_rgb_v1
+  min_frames_passive: 8
+  max_frames_buffer: 24
+  sample_every_n_frames: 1
+  passive_pass_threshold: 0.62
+  passive_reject_threshold: 0.38
+  borderline_low: 0.45
+  borderline_high: 0.58
+  challenge_type: head_turn_left
+  challenge_timeout_seconds: 3.0
+  head_turn_min_shift_px: 12
+  log_passive_scores: true
+
+dataset:
+  manifest_schema: eval/datasets/_template/manifest.schema.json
+  layout_template: eval/datasets/_template
+  collection_id: null  # e.g. face_lock_v1 — set when running
+  required_pai_ids:
+    - BF
+    - PA-01
+    - PA-02
+    - PA-03
+  optional_pai_ids:
+    - PA-04
+    - PA-05
+
+sample_sizes:
+  bona_fide:
+    min_presentations: 150
+    min_subjects: 30
+  attacks:
+    PA-01:
+      min_presentations: 50
+      min_subjects: 10
+    PA-02:
+      min_presentations: 50
+      min_subjects: 10
+    PA-03:
+      min_presentations: 50
+      min_subjects: 10
+    PA-04:
+      min_presentations: 30
+      min_subjects: 6
+
+tier_gates:
+  standard:
+    apcer_max_pooled: 0.05
+    apcer_pooled_pai_ids:
+      - PA-01
+      - PA-02
+      - PA-03
+    bpcer_max: 0.05
+    latency_ms_p95_max: 1200
+  high:
+    apcer_max_pooled: 0.01
+    bpcer_max: 0.03
+    latency_ms_p95_max: 800
+
+outcome_mapping:
+  policy_name: fail_closed_v1
+  attack_error_outcomes:
+    - LIVE
+  bona_fide_error_outcomes:
+    - ATTACK
+    - INCONCLUSIVE
+    - ERROR
+
+reporting:
+  template: eval/reports/template/report_template.md
+  summary_schema: eval/reports/template/summary_schema.json
+  output_dir: eval/reports/runs
+  artifacts:
+    - results.jsonl
+    - results.csv
+    - summary.json
+    - settings_snapshot.json
+
+notes:
+  - One presentation = one unlock-style attempt ending in a final PadResult.
+  - Active challenge may require multiple frames within the same presentation window.
+  - Record OpenCV version and git commit in settings_snapshot.json (Phase E2).

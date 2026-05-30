@@ -1,0 +1,33 @@
+{
+  "manifest_version": "1.0.0",
+  "collection_id": "fixtures_synthetic_v1",
+  "description": "Committed fixture manifest for CI regression (Phase E2+). Image files are local-only due to .gitignore; paths document expected layout.",
+  "protocol_ids": ["PAD-ISO-LAB-v1", "PAD-LIVE-SIM-v1"],
+  "samples": [
+    {
+      "sample_id": "FIX_BF_SYN_001",
+      "pai_id": "BF",
+      "ground_truth": "bona_fide",
+      "subject_id": "subj_000",
+      "path": "bona_fide_synthetic/session_01",
+      "presentation_type": "clip",
+      "capture_device": "synthetic",
+      "lux_bucket": "normal",
+      "frame_count": 4,
+      "notes": "Place synthetic bright frames locally for harness tests. Unit tests use numpy directly."
+    },
+    {
+      "sample_id": "FIX_ATK_FLAT_001",
+      "pai_id": "PA-01",
+      "ground_truth": "attack",
+      "subject_id": "subj_000",
+      "path": "attack_flat_synthetic/session_01",
+      "presentation_type": "clip",
+      "capture_device": "synthetic",
+      "lux_bucket": "normal",
+      "frame_count": 4,
+      "notes": "Low-texture synthetic clip simulating flat print-like input."
+    }
+  ],
+  "_phase_e1_note": "Scaffold only. Expected outcomes will be defined in Phase E2 when harness exists."
+}

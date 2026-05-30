@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://face-lock.local/eval/summary.schema.json",
+  "title": "Face Lock PAD Evaluation Run Summary",
+  "description": "Aggregated metrics for a single PAD evaluation run (Phase E2+ output).",
+  "type": "object",
+  "required": [
+    "run_id",
+    "protocol_id",
+    "collection_id",
+    "model_id",
+    "evaluation_policy",
+    "assurance_tier",
+    "n_attack",
+    "n_bona_fide",
+    "apcer_overall",
+    "bpcer_overall",
+    "tier_gate"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "date_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "protocol_id": {
+      "type": "string",
+      "enum": ["PAD-ISO-LAB-v1", "PAD-LIVE-SIM-v1", "PAD-REG-v1"]
+    },
+    "collection_id": {
+      "type": "string"
+    },
+    "manifest_version": {
+      "type": "string"
+    },
+    "model_id": {
+      "type": "string",
+      "description": "PADSettings.passive_model_id at run time"
+    },
+    "model_version": {
+      "type": "string"
+    },
+    "pad_mode": {
+      "type": "string"
+    },
+    "evaluation_policy": {
+      "type": "string",
+      "const": "fail_closed_v1"
+    },
+    "assurance_tier": {
+      "type": "string",
+      "enum": ["demo", "standard", "high"]
+    },
+    "git_sha": {
+      "type": "string"
+    },
+    "n_attack": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "n_bona_fide": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "apcer_overall": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of attack presentations classified as LIVE"
+    },
+    "bpcer_overall": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of bona fide presentations not classified as LIVE"
+    },
+    "apcer_by_pai": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "latency_ms_p50": {
+      "type": "number",
+      "minimum": 0
+    },
+    "latency_ms_p95": {
+      "type": "number",
+      "minimum": 0
+    },
+    "tier_gate": {
+      "type": "object",
+      "required": ["apcer", "bpcer", "overall"],
+      "properties": {
+        "apcer": {
+          "type": "string",
+          "enum": ["pass", "fail"]
+        },
+        "bpcer": {
+          "type": "string",
+          "enum": ["pass", "fail"]
+        },
+        "latency": {
+          "type": "string",
+          "enum": ["pass", "fail", "skipped"]
+        },
+        "overall": {
+          "type": "string",
+          "enum": ["pass", "fail"]
+        }
+      }
+    },
+    "baseline_comparison": {
+      "type": "object",
+      "properties": {
+        "baseline_file": { "type": "string" },
+        "delta_apcer": { "type": "number" },
+        "delta_bpcer": { "type": "number" }
+      }
+    }
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://face-lock.local/eval/manifest.schema.json",
+  "title": "Face Lock PAD Dataset Manifest",
+  "description": "Manifest for PAD evaluation collections. Do not include raw biometrics in git.",
+  "type": "object",
+  "required": ["manifest_version", "collection_id", "samples"],
+  "properties": {
+    "manifest_version": {
+      "type": "string",
+      "description": "Schema version for this manifest file",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "collection_id": {
+      "type": "string",
+      "description": "Unique collection name, e.g. face_lock_v1",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO date when collection was finalized"
+    },
+    "description": {
+      "type": "string"
+    },
+    "protocol_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["PAD-ISO-LAB-v1", "PAD-LIVE-SIM-v1", "PAD-REG-v1"]
+      }
+    },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/sample"
+      }
+    }
+  },
+  "$defs": {
+    "sample": {
+      "type": "object",
+      "required": ["sample_id", "pai_id", "ground_truth", "subject_id", "path", "presentation_type"],
+      "properties": {
+        "sample_id": {
+          "type": "string",
+          "description": "Globally unique within collection"
+        },
+        "pai_id": {
+          "type": "string",
+          "enum": ["BF", "PA-01", "PA-02", "PA-03", "PA-04", "PA-05"]
+        },
+        "ground_truth": {
+          "type": "string",
+          "enum": ["bona_fide", "attack"],
+          "description": "BF for bona fide; attack for all PA-*"
+        },
+        "subject_id": {
+          "type": "string",
+          "description": "Pseudonym only, e.g. subj_001",
+          "pattern": "^subj_[0-9]{3}$"
+        },
+        "path": {
+          "type": "string",
+          "description": "Relative path from collection root to clip folder or still image"
+        },
+        "presentation_type": {
+          "type": "string",
+          "enum": ["clip", "still"]
+        },
+        "capture_device": {
+          "type": "string",
+          "examples": ["laptop_integrated", "usb_webcam"]
+        },
+        "lux_bucket": {
+          "type": "string",
+          "enum": ["low", "normal", "high"]
+        },
+        "frame_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Expected frames for clip presentations"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "pai_id": { "const": "BF" } }
+          },
+          "then": {
+            "properties": { "ground_truth": { "const": "bona_fide" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "pai_id": { "pattern": "^PA-" } }
+          },
+          "then": {
+            "properties": { "ground_truth": { "const": "attack" } }
+          }
+        }
+      ]
+    }
+  }
+}

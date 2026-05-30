@@ -1,0 +1,11 @@
+# Face Lock AI dependencies
+# Recommended Python version: 3.11.x
+#
+# This stack intentionally stays on TensorFlow/Keras 2.15 to avoid
+# TensorFlow 2.16+ / Keras 3 / tf-keras compatibility issues.
+
+numpy==1.26.4
+opencv-python==4.10.0.84
+tensorflow==2.15.1
+keras==2.15.0
+deepface==0.0.93

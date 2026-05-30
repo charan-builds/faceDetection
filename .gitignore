@@ -1,0 +1,135 @@
+# Face Lock AI - repository hygiene
+# Keep source code versioned. Keep runtime data, biometrics, caches, and secrets local.
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.tox/
+.nox/
+
+# Test and coverage outputs
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python packaging/build outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+wheels/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+
+# Face Lock runtime data
+data/*
+!data/.gitkeep
+encodings/*
+!encodings/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Local/downloaded model artifacts
+models/*
+!models/.gitkeep
+!models/README.md
+
+# Legacy nested runtime folders found during audit
+face_detection/data/
+face_detection/encodings/
+face_detection/logs/
+face_detection/models/
+
+# Biometric, ML, and generated artifacts
+*.pkl
+*.pickle
+*.joblib
+*.npy
+*.npz
+*.h5
+*.keras
+*.onnx
+*.pt
+*.pth
+*.pb
+*.tflite
+*.bin
+*.safetensors
+
+# Captured/generated media
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.webp
+*.tif
+*.tiff
+*.avi
+*.mp4
+*.mov
+
+# PAD evaluation — local datasets and generated run outputs (Phase E1+)
+eval/datasets/*
+!eval/datasets/_template/
+!eval/datasets/_template/**
+!eval/datasets/.gitkeep
+eval/reports/runs/*
+!eval/reports/runs/.gitkeep
+
+# Allow intentionally sanitized documentation assets when needed
+!docs/assets/
+!docs/assets/**
+
+# Temporary runtime output
+temp/
+tmp/
+.cache/
+*.tmp
+*.temp
+*.bak
+*.orig
+capture.*
+temp.*
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+*.log.*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Notebook runtime state
+.ipynb_checkpoints/

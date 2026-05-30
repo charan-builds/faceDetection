@@ -1,0 +1,6 @@
+# Generated evaluation reports — do not commit run outputs
+
+eval/reports/runs/
+eval/reports/**/*.jsonl
+eval/reports/**/*.csv
+!eval/reports/template/

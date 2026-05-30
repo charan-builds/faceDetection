@@ -1,0 +1,75 @@
+# PAD-REG v1 — registration path PAD gate (check_single_image_pad)
+# Evaluates enforce_on_registration behavior before embedding generation.
+# Source of truth: FL-PAD-EVAL-001
+
+protocol_id: PAD-REG-v1
+version: 1.0.0
+status: template
+evaluation_policy: fail_closed_v1
+
+objective: >
+  Measure how often registration images would be accepted or rejected by PAD
+  before embedding generation.
+
+system_under_test:
+  module: src.pad_engine
+  entrypoint: check_single_image_pad
+  settings_source: src.config.PAD_SETTINGS
+  excluded:
+    - register.py
+    - save_frame
+    - generate_embedding
+
+presentations:
+  still_image:
+    description: Single JPEG per registration attempt
+    burst_frames: uses PAD_SETTINGS.registration_pad_burst_frames
+  optional_clip:
+    description: Short burst folder treated as one registration press
+
+pad_settings:
+  enabled: true
+  assurance_tier: standard
+  mode: passive_only
+  passive_model_id: heuristic_rgb_v1
+  enforce_on_registration: true
+  registration_pad_burst_frames: 3
+  min_frames_passive: 3
+  passive_pass_threshold: 0.62
+  passive_reject_threshold: 0.38
+
+dataset:
+  manifest_schema: eval/datasets/_template/manifest.schema.json
+  layout:
+    bona_fide: datasets/<collection>/registration/bona_fide/subject_<id>/still_<nn>.jpg
+    attacks: datasets/<collection>/registration/attacks/<PAI>/subject_<id>/still_<nn>.jpg
+  collection_id: null
+
+sample_sizes:
+  bona_fide:
+    min_stills: 100
+    min_subjects: 20
+  attacks:
+    per_pai_min_stills: 30
+    pai_ids:
+      - PA-01
+      - PA-02
+      - PA-03
+
+tier_gates:
+  standard:
+    apcer_max_pooled: 0.05
+    bpcer_max: 0.05
+
+informational_metrics:
+  registration_reject_rate_bona_fide: null
+
+reporting:
+  template: eval/reports/template/report_template.md
+  summary_schema: eval/reports/template/summary_schema.json
+  suite_label: PAD-REG
+
+notes:
+  - Attack stills should mirror what an operator would press s on during enrollment.
+  - Do not store rejected stills in git; reference paths only in local manifests.
+  - Registration eval often uses passive_only; document if active mode is tested.
