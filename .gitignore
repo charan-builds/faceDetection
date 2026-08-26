@@ -94,6 +94,7 @@ face_detection/models/
 eval/datasets/*
 !eval/datasets/_template/
 !eval/datasets/_template/**
+!eval/datasets/generate_synthetic_dataset.py
 !eval/datasets/.gitkeep
 eval/reports/runs/*
 !eval/reports/runs/.gitkeep
