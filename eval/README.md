@@ -63,6 +63,23 @@ eval/
 - Use `datasets/_template/` and `manifest.schema.json` as the layout reference.
 - Only pseudonymous `subject_id` values in manifests (e.g. `subj_001`).
 
+### Synthetic dataset generator
+
+`datasets/generate_synthetic_dataset.py` produces a seeded, procedurally
+generated collection (150 BF / 50 PA-01 / 50 PA-02 / 50 PA-03 clips) for
+exercising the harness and heuristic scorer:
+
+```bash
+python eval/datasets/generate_synthetic_dataset.py \
+    --output-dir eval/datasets/synthetic_v1 --seed 20260826
+```
+
+Generated collections carry `"data_provenance": "SYNTHETIC"` in their
+manifest. Synthetic results validate the harness pipeline only — they are
+**not** real-world PAD evidence and cannot satisfy tier sign-off, which
+requires real bona fide and physical attack presentations per the protocol
+sample-size requirements.
+
 ---
 
 ## Metrics (definitions)
