@@ -111,6 +111,7 @@ tmp/
 *.bak
 *.orig
 capture.*
+!src/capture.py
 temp.*
 
 # Local databases
