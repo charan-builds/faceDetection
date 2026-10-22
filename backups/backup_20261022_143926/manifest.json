@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-10-22T14:39:26.117000",
+  "project_root": "C:\\face_detection",
+  "total_files": 1,
+  "owner_name": "owner",
+  "files": {
+    "encodings\\owner.pkl": {
+      "size": 37812,
+      "sha256": "20b8cc1b11d966236ebfd67184a58c7c0699c55c8d9ac8995119e41b124a2bd1"
+    }
+  }
+}

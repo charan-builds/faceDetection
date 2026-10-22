@@ -1,4 +1,5 @@
 # Development and test dependencies (install alongside requirements.txt)
+# Requires Python 3.10 or 3.11 — see docs/python_environment_audit.md
 # pip install -r requirements.txt -r requirements-dev.txt
 
 pytest>=8.3.0,<9

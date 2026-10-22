@@ -294,3 +294,352 @@ class TestFindBestMatch:
                 known_records=records,
                 threshold=DEFAULT_COSINE_THRESHOLD,
             )
+
+
+# ---------------------------------------------------------------------------
+# load_face_model warm-up — unit tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestLoadFaceModel:
+    """
+    Tests for src.ai_engine.load_face_model.
+
+    DeepFace is never imported here.  We patch _get_deepface at the call-site
+    to return a controllable mock, so these tests are instant and offline.
+    """
+
+    def test_returns_model_object_on_success(self) -> None:
+        """A successful build_model call returns whatever DeepFace gives back."""
+        from unittest.mock import MagicMock, patch
+
+        mock_model = MagicMock(name="FaceModel")
+        mock_deepface = MagicMock()
+        mock_deepface.build_model.return_value = mock_model
+
+        with patch("src.ai_engine._get_deepface", return_value=mock_deepface):
+            from src.ai_engine import load_face_model
+
+            result = load_face_model("Facenet512")
+
+        assert result is mock_model
+
+    def test_calls_build_model_with_task_argument(self) -> None:
+        """Modern DeepFace receives model_name and task='facial_recognition'."""
+        from unittest.mock import MagicMock, patch
+
+        mock_deepface = MagicMock()
+        mock_deepface.build_model.return_value = MagicMock()
+
+        with patch("src.ai_engine._get_deepface", return_value=mock_deepface):
+            from src.ai_engine import load_face_model
+
+            load_face_model("Facenet512")
+
+        mock_deepface.build_model.assert_called_once_with(
+            model_name="Facenet512", task="facial_recognition"
+        )
+
+    def test_falls_back_when_task_argument_raises_type_error(self) -> None:
+        """Older DeepFace raises TypeError for unknown kwargs; fallback omits task."""
+        from unittest.mock import MagicMock, call, patch
+
+        fallback_model = MagicMock(name="FallbackModel")
+        mock_deepface = MagicMock()
+        mock_deepface.build_model.side_effect = [TypeError("unexpected keyword"), fallback_model]
+
+        with patch("src.ai_engine._get_deepface", return_value=mock_deepface):
+            from src.ai_engine import load_face_model
+
+            result = load_face_model("Facenet512")
+
+        assert result is fallback_model
+        assert mock_deepface.build_model.call_count == 2
+        # Second call must be the positional-only form
+        assert mock_deepface.build_model.call_args_list[1] == call("Facenet512")
+
+    def test_raises_runtime_error_on_unexpected_exception(self) -> None:
+        """Any non-TypeError from build_model is re-raised as RuntimeError."""
+        from unittest.mock import MagicMock, patch
+
+        mock_deepface = MagicMock()
+        mock_deepface.build_model.side_effect = OSError("weights file missing")
+
+        with patch("src.ai_engine._get_deepface", return_value=mock_deepface):
+            from src.ai_engine import load_face_model
+
+            with pytest.raises(RuntimeError, match="Could not load DeepFace model"):
+                load_face_model("Facenet512")
+
+    def test_uses_default_model_name_when_none_given(self) -> None:
+        """Calling with no arguments uses DEFAULT_MODEL_NAME."""
+        from unittest.mock import MagicMock, patch
+
+        from src.ai_engine import DEFAULT_MODEL_NAME
+
+        mock_deepface = MagicMock()
+        mock_deepface.build_model.return_value = MagicMock()
+
+        with patch("src.ai_engine._get_deepface", return_value=mock_deepface):
+            from src.ai_engine import load_face_model
+
+            load_face_model()
+
+        call_kwargs = mock_deepface.build_model.call_args
+        assert call_kwargs.kwargs.get("model_name") == DEFAULT_MODEL_NAME
+
+
+# ---------------------------------------------------------------------------
+# app.warmup_model — unit tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestWarmupModel:
+    """
+    Tests for app.warmup_model.
+
+    Patches src.ai_engine.load_face_model at the app module boundary so no
+    DeepFace download or real model load occurs.
+    """
+
+    def test_success_prints_ready_message(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Happy path: load_face_model succeeds → 'ready' status message."""
+        from unittest.mock import MagicMock, patch
+
+        with patch("app.load_face_model", return_value=MagicMock()):
+            from app import warmup_model
+
+            warmup_model()
+
+        captured = capsys.readouterr()
+        assert "ready" in captured.out.lower() or "ok" in captured.out.lower()
+
+    def test_failure_prints_warning_not_error(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """When load_face_model raises, warmup_model warns and does not re-raise."""
+        from unittest.mock import patch
+
+        with patch(
+            "app.load_face_model",
+            side_effect=RuntimeError("weights unavailable"),
+        ):
+            from app import warmup_model
+
+            # Must not raise — warm-up failure is non-fatal.
+            warmup_model()
+
+        captured = capsys.readouterr()
+        assert "warning" in captured.out.lower() or "skipped" in captured.out.lower()
+
+    def test_failure_does_not_raise(self) -> None:
+        """Any exception from load_face_model is swallowed by warmup_model."""
+        from unittest.mock import patch
+
+        with patch("app.load_face_model", side_effect=Exception("unexpected")):
+            from app import warmup_model
+
+            # If this raises, the test fails.
+            warmup_model()
+
+    def test_passes_model_name_to_load_face_model(self) -> None:
+        """warmup_model forwards the model_name argument."""
+        from unittest.mock import MagicMock, patch
+
+        with patch("app.load_face_model", return_value=MagicMock()) as mock_load:
+            from app import warmup_model
+
+            warmup_model("SomeOtherModel")
+
+        mock_load.assert_called_once_with("SomeOtherModel")
+
+    def test_uses_default_model_name_when_none_given(self) -> None:
+        """Calling warmup_model() with no args uses DEFAULT_MODEL_NAME."""
+        from unittest.mock import MagicMock, patch
+
+        from app import DEFAULT_MODEL_NAME
+
+        with patch("app.load_face_model", return_value=MagicMock()) as mock_load:
+            from app import warmup_model
+
+            warmup_model()
+
+        mock_load.assert_called_once_with(DEFAULT_MODEL_NAME)
+
+    def test_run_app_calls_warmup_model(self) -> None:
+        """run_app must call warmup_model exactly once before showing the menu."""
+        from unittest.mock import MagicMock, call, patch
+
+        # Stop the menu loop immediately after the first iteration.
+        with (
+            patch("app.ensure_project_folders"),
+            patch("app.warmup_model") as mock_warmup,
+            patch("app.show_banner"),
+            patch("app.show_menu"),
+            patch("app.get_menu_choice", return_value="3"),  # EXIT on first choice
+            patch("app.print_status"),
+        ):
+            from app import run_app
+
+            run_app()
+
+        mock_warmup.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# load_all_user_embeddings resilience tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestLoadAllResiliency:
+    """
+    load_all_user_embeddings must skip bad files and continue, never abort-all.
+    Integrity checks are NOT weakened — tampered files are detected and skipped,
+    not silently accepted.
+    """
+
+    _SAMPLE_RECORD = {
+        "user_name": "alice",
+        "safe_name": "alice",
+        "model_name": "Facenet512",
+        "detector_backend": "opencv",
+        "distance_metric": "cosine",
+        "threshold": 0.30,
+        "embeddings": [[0.1, 0.2, 0.3]],
+        "embedding_count": 1,
+        "image_paths": [],
+        "created_at": "2026-06-01T12:00:00",
+    }
+
+    @pytest.fixture()
+    def signed_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FACE_LOCK_SIGNING_KEY",
+                           "deadbeefdeadbeefdeadbeefdeadbeef0102030405060708")
+
+    @pytest.fixture()
+    def unsigned_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("FACE_LOCK_SIGNING_KEY", raising=False)
+
+    @pytest.fixture()
+    def log_capture(self, caplog: pytest.LogCaptureFixture):
+        import logging as _logging
+        face_lock = _logging.getLogger("face_lock")
+        face_lock.addHandler(caplog.handler)
+        face_lock.setLevel(_logging.DEBUG)
+        yield caplog
+        face_lock.removeHandler(caplog.handler)
+
+    def _write_valid_signed(
+        self, path: Path, user_name: str, signed_env: None
+    ) -> None:
+        import src.ai_engine as ae
+        ae.save_user_embeddings(user_name, [[0.1, 0.2, 0.3]], output_path=path)
+
+    def _write_corrupt(self, path: Path) -> None:
+        path.write_bytes(b"\x80\x04corrupt-garbage-bytes-not-a-pickle")
+
+    def _write_legacy(self, path: Path) -> None:
+        import pickle
+        import json
+        rec = json.loads(json.dumps(self._SAMPLE_RECORD))
+        with path.open("wb") as f:
+            pickle.dump(rec, f)
+
+    def _write_tampered(self, path: Path, signed_env: None) -> None:
+        from src.integrity import wrap_record_for_storage
+        from src.utils import save_pickle
+        import json
+
+        rec = json.loads(json.dumps(self._SAMPLE_RECORD))
+        payload = wrap_record_for_storage(rec)
+        payload["record"]["user_name"] = "mallory"  # tamper after signing
+        save_pickle(payload, path)
+
+    def test_corrupt_file_is_skipped(
+        self, tmp_path: Path, signed_env: None, log_capture
+    ) -> None:
+        import src.ai_engine as ae
+        self._write_corrupt(tmp_path / "bad.pkl")
+        records = ae.load_all_user_embeddings(encodings_dir=tmp_path)
+        assert records == []
+
+    def test_corrupt_file_logs_error(
+        self, tmp_path: Path, signed_env: None, log_capture
+    ) -> None:
+        import logging as _logging
+        import src.ai_engine as ae
+        self._write_corrupt(tmp_path / "bad.pkl")
+        with log_capture.at_level(_logging.ERROR, logger="face_lock"):
+            ae.load_all_user_embeddings(encodings_dir=tmp_path)
+        assert any("embedding_load_skipped" in r.message for r in log_capture.records)
+
+    def test_invalid_signature_is_skipped_not_raised(
+        self, tmp_path: Path, signed_env: None, log_capture
+    ) -> None:
+        import src.ai_engine as ae
+        self._write_tampered(tmp_path / "tampered.pkl", signed_env)
+        # Must NOT raise — just skip
+        records = ae.load_all_user_embeddings(encodings_dir=tmp_path)
+        assert records == []
+
+    def test_legacy_file_loads_with_warning(
+        self, tmp_path: Path, unsigned_env: None, log_capture
+    ) -> None:
+        import logging as _logging
+        import src.ai_engine as ae
+        self._write_legacy(tmp_path / "legacy.pkl")
+        with log_capture.at_level(_logging.WARNING, logger="face_lock"):
+            records = ae.load_all_user_embeddings(encodings_dir=tmp_path)
+        assert len(records) == 1
+        assert records[0]["user_name"] == "alice"
+
+    def test_valid_signed_file_loads(
+        self, tmp_path: Path, signed_env: None
+    ) -> None:
+        import src.ai_engine as ae
+        self._write_valid_signed(tmp_path / "alice.pkl", "alice", signed_env)
+        records = ae.load_all_user_embeddings(encodings_dir=tmp_path)
+        assert len(records) == 1
+        assert records[0]["user_name"] == "alice"
+
+    def test_one_corrupt_one_valid_returns_valid(
+        self, tmp_path: Path, signed_env: None, log_capture
+    ) -> None:
+        import src.ai_engine as ae
+        self._write_corrupt(tmp_path / "aaa_bad.pkl")   # sorts first
+        self._write_valid_signed(tmp_path / "zzz_alice.pkl", "alice", signed_env)
+        records = ae.load_all_user_embeddings(encodings_dir=tmp_path)
+        assert len(records) == 1
+        assert records[0]["user_name"] == "alice"
+
+    def test_partial_load_logs_warning(
+        self, tmp_path: Path, signed_env: None, log_capture
+    ) -> None:
+        import logging as _logging
+        import src.ai_engine as ae
+        self._write_corrupt(tmp_path / "aaa_bad.pkl")
+        self._write_valid_signed(tmp_path / "zzz_alice.pkl", "alice", signed_env)
+        with log_capture.at_level(_logging.WARNING, logger="face_lock"):
+            ae.load_all_user_embeddings(encodings_dir=tmp_path)
+        assert any("embedding_load_partial" in r.message for r in log_capture.records)
+
+    def test_all_corrupt_returns_empty_list(
+        self, tmp_path: Path, signed_env: None
+    ) -> None:
+        import src.ai_engine as ae
+        for i in range(3):
+            (tmp_path / f"bad_{i}.pkl").write_bytes(b"garbage")
+        records = ae.load_all_user_embeddings(encodings_dir=tmp_path)
+        assert records == []
+
+    def test_integrity_check_not_weakened(
+        self, tmp_path: Path, signed_env: None, log_capture
+    ) -> None:
+        """Tampered file is detected (skipped) — NOT silently accepted."""
+        import src.ai_engine as ae
+        self._write_tampered(tmp_path / "tampered.pkl", signed_env)
+        records = ae.load_all_user_embeddings(encodings_dir=tmp_path)
+        # Tampered record must NOT appear in the loaded list
+        assert not any(r.get("user_name") == "mallory" for r in records)

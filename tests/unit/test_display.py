@@ -345,3 +345,88 @@ class TestInMemoryDrawing:
         before = int(blank_frame.sum())
         draw_text(blank_frame, "X", (15, 25), COLOR_INFO)
         assert int(blank_frame.sum()) > before
+
+
+@pytest.mark.unit
+class TestExplicitDisplayStates:
+    """Unit tests for live verification rectangle and explicit state rendering."""
+
+    def test_resolve_display_state_explicit(self) -> None:
+        from src.display import resolve_display_state
+
+        assert resolve_display_state({"state": "DETECTING FACE"}) == "DETECTING FACE"
+        assert resolve_display_state({"state": "CHECKING LIVENESS"}) == "CHECKING LIVENESS"
+        assert resolve_display_state({"state": "VERIFYING IDENTITY"}) == "VERIFYING IDENTITY"
+        assert resolve_display_state({"state": "NOT VERIFIED"}) == "NOT VERIFIED"
+        assert resolve_display_state({"state": "TRY AGAIN"}) == "TRY AGAIN"
+
+    def test_resolve_display_state_fail_closed_if_liveness_not_passed(self) -> None:
+        from src.display import resolve_display_state
+
+        # Even if access_granted is True or state claims VERIFIED, fail-closed without liveness
+        status_unverified = {"state": "VERIFIED", "access_granted": True, "liveness_passed": False}
+        assert resolve_display_state(status_unverified) == "NOT VERIFIED"
+
+        status_verified = {"state": "VERIFIED", "access_granted": True, "liveness_passed": True}
+        assert resolve_display_state(status_verified) == "VERIFIED"
+
+    def test_get_status_color_for_all_explicit_states(self) -> None:
+        from src.display import (
+            COLOR_DENIED,
+            COLOR_GRANTED,
+            COLOR_INFO,
+            COLOR_WARNING,
+            get_status_color,
+        )
+
+        assert get_status_color({"state": "DETECTING FACE"}) == COLOR_INFO
+        assert get_status_color({"state": "CHECKING LIVENESS"}) == COLOR_WARNING
+        assert get_status_color({"state": "VERIFYING IDENTITY"}) == COLOR_WARNING
+        assert get_status_color({"state": "TRY AGAIN"}) == COLOR_WARNING
+        assert get_status_color({"state": "NOT VERIFIED"}) == COLOR_DENIED
+        assert get_status_color({"state": "VERIFIED", "access_granted": True}) == COLOR_GRANTED
+
+    def test_draw_status_overlay_renders_bounding_box_when_provided(
+        self, blank_frame: np.ndarray
+    ) -> None:
+        from src.display import COLOR_WARNING, draw_status_overlay
+
+        status = {
+            "state": "CHECKING LIVENESS",
+            "primary_text": "WAITING",
+            "secondary_text": "Hold still",
+        }
+        with patch("src.display.draw_bounding_box") as mock_box:
+            draw_status_overlay(
+                frame=blank_frame,
+                status=status,
+                frame_skip=10,
+                cooldown_seconds=1.5,
+                face_box=(15, 25, 60, 80),
+            )
+
+        mock_box.assert_called_once_with(blank_frame, (15, 25, 60, 80), color=COLOR_WARNING, thickness=2)
+
+    def test_draw_status_overlay_fail_closed_on_verified_without_liveness(
+        self, blank_frame: np.ndarray
+    ) -> None:
+        from src.display import draw_status_overlay
+
+        # State claims VERIFIED, but liveness is False -> must render NOT VERIFIED
+        status = {
+            "state": "VERIFIED",
+            "access_granted": True,
+            "liveness_passed": False,
+            "secondary_text": "Spoof detected",
+        }
+        with patch("src.display.cv2.putText") as mock_puttext:
+            draw_status_overlay(
+                frame=blank_frame,
+                status=status,
+                frame_skip=10,
+                cooldown_seconds=1.5,
+            )
+
+        texts = [call.args[1] for call in mock_puttext.call_args_list]
+        assert "NOT VERIFIED" in texts
+        assert "VERIFIED" not in texts

@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "face-lock-ai"
+version = "0.1.0"
+description = "Face Lock AI — webcam face recognition with presentation attack detection"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "Face Lock AI" }]
+dependencies = [
+    "numpy==1.26.4",
+    "opencv-python==4.10.0.84",
+    "tensorflow==2.15.1",
+    "keras==2.15.0",
+    "deepface==0.0.93",
+    "PyYAML>=6.0.1,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0,<9",
+    "pytest-cov>=5.0.0,<6",
+]
+
+[project.scripts]
+face-lock = "app:main"
+collect-pad-dataset = "tools.collect_pad_dataset:main"
+generate-pad-manifest = "tools.generate_manifest:main"
+qc-pad-dataset = "tools.qc_dataset:main"
+run-pad-eval = "eval.harness.run_pad_eval:main"
+build-pad-report = "eval.reporting.report_builder:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*", "tools", "tools.*", "eval", "eval.*"]
+exclude = ["tests", "tests.*", "eval.tests", "eval.tests.*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests", "eval/tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "unit: Fast, isolated tests with no webcam, GPU, or DeepFace.",
+    "integration: Cross-module tests with mocks/fakes for heavy dependencies.",
+    "system: End-to-end flows; may require camera and full ML stack (manual/CI optional).",
+    "pad: Presentation Attack Detection (pad_engine) tests.",
+]

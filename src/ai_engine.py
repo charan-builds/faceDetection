@@ -13,6 +13,10 @@ It does not open the webcam, display windows, or show application menus.
 
 from __future__ import annotations
 
+import logging
+import math
+import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -22,6 +26,14 @@ import numpy as np
 try:
     # Preferred import when running the project from app.py.
     from src.config import AI_SETTINGS, STORAGE_SETTINGS
+    from src.integrity import (
+        IntegrityError,
+        is_strict_mode,
+        unwrap_stored_payload,
+        verify_record,
+        wrap_record_for_storage,
+    )
+    from src.logging_config import get_logger, log_event
     from src.utils import (
         ENCODINGS_DIR,
         clean_name,
@@ -32,7 +44,18 @@ try:
 except ModuleNotFoundError:
     # Fallback import when running this file directly as: python src/ai_engine.py
     from config import AI_SETTINGS, STORAGE_SETTINGS
+    from integrity import (
+        IntegrityError,
+        is_strict_mode,
+        unwrap_stored_payload,
+        verify_record,
+        wrap_record_for_storage,
+    )
+    from logging_config import get_logger, log_event
     from utils import ENCODINGS_DIR, clean_name, ensure_directory, load_pickle, save_pickle
+
+
+LOGGER = get_logger(__name__)
 
 
 # Default DeepFace model used by this project.
@@ -96,6 +119,17 @@ def _prepare_image_input(image_input: str | Path | Any) -> str | Any:
     return image_input
 
 
+# Float tolerance for cosine distance vs threshold (distance <= threshold policy).
+_COSINE_THRESHOLD_ABS_TOL = 1e-6
+
+
+def _distance_within_threshold(distance: float, threshold: float) -> bool:
+    """Return True when cosine distance meets the access threshold (<=, float-safe)."""
+    if distance <= threshold:
+        return True
+    return math.isclose(distance, threshold, rel_tol=0.0, abs_tol=_COSINE_THRESHOLD_ABS_TOL)
+
+
 def _as_float_list(values: Sequence[float]) -> list[float]:
     """
     Convert an embedding-like sequence into a clean list of floats.
@@ -118,6 +152,13 @@ def _to_numpy_embedding(embedding: Sequence[float]) -> np.ndarray:
     """
     Convert an embedding into a NumPy vector for math operations.
     """
+    if isinstance(embedding, np.ndarray):
+        if embedding.ndim != 1:
+            raise ValueError("Embedding must be a one-dimensional vector.")
+        if embedding.size == 0:
+            raise ValueError("Embedding cannot be empty.")
+        return np.asarray(embedding, dtype=np.float32)
+
     # NumPy makes vector math fast and concise.
     vector = np.asarray(_as_float_list(embedding), dtype=np.float32)
 
@@ -134,6 +175,10 @@ def load_face_model(model_name: str = DEFAULT_MODEL_NAME) -> Any:
 
     DeepFace caches models internally, so calling this once early can reduce
     delay during the first recognition attempt.
+
+    Note:
+        Optional operator API; ``recognize_live`` does not call this today.
+        Consider invoking once at application startup for lower first-frame latency.
     """
     DeepFace = _get_deepface()
 
@@ -350,7 +395,7 @@ def compare_embeddings(
     distance = 1.0 - similarity
 
     return {
-        "is_match": distance <= threshold,
+        "is_match": _distance_within_threshold(distance, threshold),
         "cosine_similarity": similarity,
         "cosine_distance": distance,
         "threshold": threshold,
@@ -412,7 +457,14 @@ def save_user_embeddings(
     threshold: float = DEFAULT_COSINE_THRESHOLD,
 ) -> Path:
     """
-    Save one user's embeddings to a pickle file.
+    Save one user's embeddings to a pickle file, signed with HMAC-SHA256.
+
+    The on-disk format is::
+
+        {"record": {<embedding record>}, "signature": "<hex digest>"}
+
+    In unsigned mode (``FACE_LOCK_SIGNING_KEY`` absent) the signature field
+    is an empty string and a WARNING is logged.
     """
     # Make sure encodings/ exists before writing into it.
     ensure_directory(ENCODINGS_DIR)
@@ -427,10 +479,106 @@ def save_user_embeddings(
         threshold=threshold,
     )
 
+    # Wrap the record with its integrity signature before persisting.
+    payload = wrap_record_for_storage(record)
+
     # Use the default per-user path unless a custom path is provided.
     target_path = Path(output_path) if output_path else get_user_embedding_path(user_name)
 
-    return save_pickle(record, target_path)
+    # Safe atomic replacement:
+    # 1. Write new template to a temporary file in the same directory
+    # 2. Validate its structure and HMAC signature on disk
+    # 3. Atomically replace target_path (preserving old template on any failure)
+    tmp_path = target_path.with_name(f"{target_path.stem}_tmp_{os.getpid()}_{int(time.time() * 1000)}.pkl")
+    try:
+        save_pickle(payload, tmp_path)
+        raw_check = load_pickle(tmp_path)
+        verified_record = _load_and_verify_record(raw_check, tmp_path)
+        if (
+            not isinstance(verified_record, dict)
+            or verified_record.get("user_name") != user_name
+            or len(verified_record.get("embeddings", [])) != len(embeddings)
+            or verified_record.get("model_name") != model_name
+        ):
+            raise ValueError(f"Temporary template validation failed for {tmp_path}")
+        os.replace(tmp_path, target_path)
+    except Exception:
+        if tmp_path.is_file():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        raise
+
+    return target_path
+
+
+def _load_and_verify_record(raw_payload: Any, source_path: Path) -> dict[str, Any]:
+    """
+    Shared verification logic used by load_user_embeddings and
+    load_all_user_embeddings.
+
+    Handles new signed format, new unsigned format, and legacy flat format.
+    Raises IntegrityError on tampered files (signed mode only).
+    Logs a WARNING for legacy files so operators know to re-register.
+
+    Args:
+        raw_payload: The raw object returned by load_pickle.
+        source_path: Path of the file (used in error messages only).
+
+    Returns:
+        The inner embedding record dict, validated and ready for use.
+
+    Raises:
+        ValueError:      If the payload is not a dict or lacks "embeddings".
+        IntegrityError:  If signature verification fails in signed mode.
+    """
+    if not isinstance(raw_payload, dict):
+        raise ValueError(f"Invalid embedding record: {source_path}")
+
+    record, signature, is_legacy = unwrap_stored_payload(raw_payload)
+
+    if not isinstance(record, dict) or "embeddings" not in record:
+        raise ValueError(f"Invalid embedding record: {source_path}")
+
+    if is_legacy:
+        if is_strict_mode():
+            log_event(
+                LOGGER,
+                "integrity_check_failed",
+                level=logging.ERROR,
+                reason="legacy_template_rejected_in_strict_mode",
+                path=str(source_path),
+                user_name=record.get("user_name", "unknown"),
+            )
+            raise IntegrityError(
+                f"Legacy unsigned embedding file rejected in strict mode: {source_path}. "
+                "Strict mode requires all templates to be signed with HMAC-SHA256. "
+                "Re-register this user to generate a signed template."
+            )
+
+        # Legacy file: loaded before integrity signing was introduced.
+        log_event(
+            LOGGER,
+            "integrity_legacy_record_loaded",
+            level=logging.WARNING,
+            path=str(source_path),
+            user_name=record.get("user_name", "unknown"),
+            message="Legacy unsigned embedding file loaded. "
+                    "Re-register this user to add integrity protection.",
+        )
+        # Do NOT block access — backward-compatibility requirement in non-strict mode.
+        return record
+
+    # New format: run signature verification.
+    valid, reason = verify_record(record, signature)
+    if not valid:
+        raise IntegrityError(
+            f"Embedding file failed integrity check ({reason}): {source_path}. "
+            "The file may have been tampered with. Re-register this user."
+        )
+
+    return record
 
 
 def load_user_embeddings(
@@ -438,45 +586,95 @@ def load_user_embeddings(
     input_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """
-    Load one user's embedding record from a pickle file.
+    Load one user's embedding record and verify its integrity signature.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError:        If the record structure is invalid.
+        IntegrityError:    If the HMAC signature check fails (signed mode).
     """
     # Use the default per-user path unless a custom path is provided.
     source_path = Path(input_path) if input_path else get_user_embedding_path(user_name)
 
-    record = load_pickle(source_path)
-
-    if not isinstance(record, dict) or "embeddings" not in record:
-        raise ValueError(f"Invalid embedding record: {source_path}")
-
-    return record
+    raw_payload = load_pickle(source_path)
+    return _load_and_verify_record(raw_payload, source_path)
 
 
 def load_all_user_embeddings(
-    encodings_dir: str | Path = ENCODINGS_DIR,
+    encodings_dir: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Load all user embedding records from the encodings folder.
+    Load all user embedding records from the encodings folder, verifying
+    each file's integrity signature before trusting its contents.
+
+    Resilience policy:
+        - Corrupt pickle files (unreadable bytes, ``RestrictedUnpicklingError``)
+          are logged and skipped; remaining users still load.
+        - Files that fail integrity verification (tampered / missing signature
+          in signed mode) are also skipped with an ERROR log.
+        - Legacy unsigned files load with a WARNING.
+        - The caller receives (records, skipped_count) so callers can react to
+          partial loads.
+
+    Returns:
+        A list of successfully loaded and verified embedding records.
+
+    Note:
+        This function never raises on per-file errors. Callers that need
+        strict abort-on-any-failure behaviour should call
+        ``load_user_embeddings`` per user instead.
     """
-    folder = Path(encodings_dir)
+    folder = Path(encodings_dir) if encodings_dir is not None else Path(ENCODINGS_DIR)
 
     # If there are no saved encodings yet, return an empty list.
     if not folder.is_dir():
         return []
 
-    # Load every configured embedding file as one user record.
     records: list[dict[str, Any]] = []
     embedding_pattern = f"*.{STORAGE_SETTINGS.embedding_file_extension}"
+    skipped = 0
 
     for file_path in sorted(folder.glob(embedding_pattern)):
         try:
-            record = load_pickle(file_path)
+            raw_payload = load_pickle(file_path)
         except Exception as error:
-            raise RuntimeError(f"Could not load embedding file: {file_path}") from error
+            # Corrupt or unreadable file — skip and continue.
+            log_event(
+                LOGGER,
+                "embedding_load_skipped",
+                level=logging.ERROR,
+                path=str(file_path),
+                error_type=type(error).__name__,
+                reason=str(error),
+            )
+            skipped += 1
+            continue
 
-        if not isinstance(record, dict) or "embeddings" not in record:
-            raise ValueError(f"Invalid embedding record: {file_path}")
+        try:
+            record = _load_and_verify_record(raw_payload, file_path)
+        except (IntegrityError, ValueError) as error:
+            # Tampered, schema-invalid, or otherwise untrustworthy — skip.
+            log_event(
+                LOGGER,
+                "embedding_load_skipped",
+                level=logging.ERROR,
+                path=str(file_path),
+                error_type=type(error).__name__,
+                reason=str(error),
+            )
+            skipped += 1
+            continue
 
         records.append(record)
+
+    if skipped > 0:
+        log_event(
+            LOGGER,
+            "embedding_load_partial",
+            level=logging.WARNING,
+            loaded=len(records),
+            skipped=skipped,
+        )
 
     return records
 
@@ -544,6 +742,9 @@ def find_best_match(
         }
 
     # The closest face still needs to pass the threshold.
-    best_result["is_match"] = best_result["cosine_distance"] <= threshold
+    best_result["is_match"] = _distance_within_threshold(
+        best_result["cosine_distance"],
+        threshold,
+    )
 
     return best_result

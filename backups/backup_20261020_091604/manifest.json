@@ -1,0 +1,95 @@
+{
+  "timestamp": "2026-10-20T09:16:04.879520",
+  "project_root": "C:\\face_detection",
+  "total_files": 22,
+  "files": {
+    "encodings\\cherry.pkl": {
+      "size": 37834,
+      "sha256": "dc6da42b5b5f5d994492a32d139b7c727a0929191c8eedd1543300c255e836ff"
+    },
+    "encodings\\owner.pkl": {
+      "size": 37812,
+      "sha256": "20b8cc1b11d966236ebfd67184a58c7c0699c55c8d9ac8995119e41b124a2bd1"
+    },
+    "data\\cherry\\cherry_20261018_073329_248828.jpg": {
+      "size": 202444,
+      "sha256": "d2469c0125469abda2c900f2d1b92d21065f17fe5ea536a0087d23d5cd3ba1d4"
+    },
+    "data\\cherry\\cherry_20261018_073330_108418.jpg": {
+      "size": 253781,
+      "sha256": "b968447e4e4c08b6283f0977d64891493d5022f04412b2e7f3487d1dd277aa7d"
+    },
+    "data\\cherry\\cherry_20261018_073330_953136.jpg": {
+      "size": 255149,
+      "sha256": "0a5c9414c221415430b03ab64077b714bbd1e5890e418bb63c509929f0218bce"
+    },
+    "data\\cherry\\cherry_20261018_073331_367453.jpg": {
+      "size": 245802,
+      "sha256": "566ce33df12257c72a356dd46fba6f19ccce357b4dd762a6871c1f5a197572a7"
+    },
+    "data\\cherry\\cherry_20261018_073331_819536.jpg": {
+      "size": 248409,
+      "sha256": "e0a0cb2be00c3d6c3f0d2bea2a0632adb1435963d8c4944c9f5b19d0fcd78fb0"
+    },
+    "data\\cherry\\cherry_20261018_073332_376801.jpg": {
+      "size": 246100,
+      "sha256": "76fd93f08079fd44126ee69c32601ea847a0c37f39e6bc7b5e387b5faed0d291"
+    },
+    "data\\cherry\\cherry_20261018_073333_364788.jpg": {
+      "size": 250903,
+      "sha256": "0c8390681d713e5323c6e83a7680c491a1d0f594386762ee07e241bbbe13b99e"
+    },
+    "data\\cherry\\cherry_20261018_073333_782566.jpg": {
+      "size": 248126,
+      "sha256": "5febeaf242061239c2204a6a72ae3989581d50c85b2f907f046128c513b9306a"
+    },
+    "data\\cherry\\cherry_20261018_073334_192541.jpg": {
+      "size": 244670,
+      "sha256": "5d757e58ef942fdb4efbe01cdb9c9909bf7689cbbf624619cf2c1d797c527ce9"
+    },
+    "data\\cherry\\cherry_20261018_073334_615783.jpg": {
+      "size": 243910,
+      "sha256": "a535de4f9feb380703a915c4dcd9b298bab3f2cd9b09dc24a3c42907b15a2654"
+    },
+    "data\\owner\\owner_20261017_064309_344492.jpg": {
+      "size": 317102,
+      "sha256": "9296c539e14b25dc182b09fa167ae000c0fb235f92cc79631dd7150ef7c843d0"
+    },
+    "data\\owner\\owner_20261017_064309_979872.jpg": {
+      "size": 321790,
+      "sha256": "80c1e7632c9edf79d38cfe4cdbafa5a7bc2150ca78dad9e3a89bf315a5f3280e"
+    },
+    "data\\owner\\owner_20261017_064310_526525.jpg": {
+      "size": 325391,
+      "sha256": "95831958f84d7fb2f7f0ffdc3c144c47cedec23681aefc91f3951ec89faff146"
+    },
+    "data\\owner\\owner_20261017_064311_438329.jpg": {
+      "size": 322024,
+      "sha256": "d44bd88b0cfc89ca9ec2ee443a43c831c214600937b3bb09a0c6b0a5d6decc8b"
+    },
+    "data\\owner\\owner_20261017_064312_126458.jpg": {
+      "size": 332983,
+      "sha256": "7c20d16a416fe6e66246c215a03f7dd1dd4f27b30c331d8af8f96d28b2698494"
+    },
+    "data\\owner\\owner_20261017_064316_104112.jpg": {
+      "size": 330386,
+      "sha256": "6040dff4bc34ad55ba038e11fe0086acd000e6ae9159e3670897b87911f3cfe9"
+    },
+    "data\\owner\\owner_20261017_064318_334483.jpg": {
+      "size": 331032,
+      "sha256": "5f8762475aedfca2bdaffb08342b97d176978ec2e060c97afdb031a9d6506c27"
+    },
+    "data\\owner\\owner_20261017_064319_308225.jpg": {
+      "size": 330920,
+      "sha256": "0de8e987228b13783a795d0924552e4e6d40f4141f6803f05db2ff5c594f40eb"
+    },
+    "data\\owner\\owner_20261017_064320_619328.jpg": {
+      "size": 327913,
+      "sha256": "501adbfdfaacd12d6bd480a8977f45d652cf34e343ef21dca88f97b5e3e22b9f"
+    },
+    "data\\owner\\owner_20261017_064321_847285.jpg": {
+      "size": 321406,
+      "sha256": "8607f80d24d67c8273fceeeea72d50d1178c3edb040bf5e58b907aa946ae51ac"
+    }
+  }
+}

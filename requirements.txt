@@ -1,8 +1,12 @@
 # Face Lock AI dependencies
-# Recommended Python version: 3.11.x
+#
+# Supported Python: 3.10.x or 3.11.x (recommended: 3.11.x)
+# NOT supported with these pins: Python 3.12+ (no tensorflow==2.15.1 wheels)
+#
+# See docs/python_environment_audit.md for recovery steps if install fails.
 #
 # This stack intentionally stays on TensorFlow/Keras 2.15 to avoid
-# TensorFlow 2.16+ / Keras 3 / tf-keras compatibility issues.
+# TensorFlow 2.16+ / Keras 3 / tf-keras compatibility issues with DeepFace.
 
 numpy==1.26.4
 opencv-python==4.10.0.84

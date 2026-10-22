@@ -1,0 +1,43 @@
+{
+  "apcer_by_pai": {
+    "PA-01": 0.0,
+    "PA-02": 0.0,
+    "PA-03": 0.0
+  },
+  "apcer_overall": 0.0,
+  "apcer_overall_pct": 0.0,
+  "assurance_tier": "standard",
+  "bpcer_overall": 0.0,
+  "bpcer_overall_pct": 0.0,
+  "collection_id": "synthetic_pad_v1",
+  "confusion": {
+    "fn": 0,
+    "fp": 150,
+    "tn": 0,
+    "tp": 150
+  },
+  "date_utc": "2026-08-24T01:44:19.194104+00:00",
+  "evaluation_policy": "fail_closed_v1",
+  "latency_ms": {
+    "count": 300,
+    "max": 218.99999998277053,
+    "mean": 91.6733333330679,
+    "median": 93.99999998277053,
+    "min": 61.999999976251274,
+    "p95": 125.0,
+    "p99": 141.00000000325963
+  },
+  "manifest_version": "1.0",
+  "model_id": "heuristic_rgb_v1",
+  "n_attack": 150,
+  "n_bona_fide": 150,
+  "protocol_id": "PAD-ISO-LAB-v1",
+  "protocol_version": "1.0.0",
+  "run_id": "pad_eval_20260824T014320Z_308ddf7d",
+  "tier_gate": {
+    "apcer": "pass",
+    "bpcer": "pass",
+    "latency": "pass",
+    "overall": "pass"
+  }
+}

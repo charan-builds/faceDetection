@@ -1,0 +1,16 @@
+{
+  "collection_id": "face_lock_v1",
+  "created_at": "2026-05-30",
+  "threat_model_note": "Attack subjects may differ from bona fide subjects unless paired study is intentional.",
+  "capture_environment": {
+    "primary_device": "laptop_integrated",
+    "os": "Windows 11",
+    "camera_distance_cm": "40-55",
+    "background": "neutral_wall",
+    "git_sha_at_collection_start": "replace-with-git-rev-parse-HEAD"
+  },
+  "collectors": ["collector_a"],
+  "labeler": "labeler_a",
+  "qc_reviewer": "qc_a",
+  "phases_completed": ["P0", "P1"]
+}

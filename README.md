@@ -150,15 +150,36 @@ face-lock/
 
 ## Recommended Python Version
 
-Use Python `3.11.x`.
+Use Python **`3.11.x`** (also supported: **`3.10.x`**).
 
 This project intentionally uses a stable TensorFlow/Keras 2.15 stack to avoid
 common TensorFlow 2.16+ and Keras 3 compatibility issues with DeepFace.
 
-Avoid Python `3.12` or newer for this exact dependency set unless you update and
-test the ML stack carefully.
+**Do not use Python 3.12 or newer** with the pinned dependencies — TensorFlow
+2.15.1 does not publish wheels for Python 3.12, so `pip install` will fail with:
+
+```text
+No matching distribution found for tensorflow==2.15.1
+```
+
+See [docs/python_environment_audit.md](docs/python_environment_audit.md) for the
+full compatibility matrix and recovery commands.
 
 ## Installation
+
+### 0. Check Python version
+
+```powershell
+python --version
+```
+
+If you see **3.12** or **3.13**, install Python 3.11 and use it for the venv
+(steps below). On Windows with the `py` launcher:
+
+```powershell
+py -0p
+py -3.11 --version
+```
 
 ### 1. Clone or Open the Project
 
@@ -168,7 +189,20 @@ cd C:\face_detection
 
 ### 2. Create a Virtual Environment
 
+**Important:** create the venv with Python **3.11** (not 3.12).
+
 Windows PowerShell:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\activate
+python --version
+```
+
+If `py -3.11` is unavailable, install Python 3.11 from
+[python.org](https://www.python.org/downloads/release/python-3119/) and retry.
+
+Legacy (only if `python` already points to 3.11):
 
 ```powershell
 python -m venv .venv
@@ -178,8 +212,9 @@ python -m venv .venv
 macOS/Linux:
 
 ```bash
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
+python --version
 ```
 
 ### 3. Upgrade Build Tools
@@ -188,13 +223,27 @@ source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 ```
 
-### 4. Install Dependencies
+### 4. Install the Project (editable) + dependencies
+
+From the repository root, install the package in editable mode so `src`, `tools`,
+and `eval` resolve correctly from any working directory:
 
 ```powershell
-pip install -r requirements.txt
+pip install -e ".[dev]"
+python scripts/patch_deepface_tf215.py
 ```
 
-The current dependency set is:
+**DeepFace + TensorFlow 2.15:** DeepFace 0.0.93 requires a one-line compatibility patch
+after install (see [docs/deepface_runtime_rootcause.md](docs/deepface_runtime_rootcause.md)).
+
+This reads `pyproject.toml` (runtime + dev extras). Equivalent manual install:
+
+```powershell
+pip install -r requirements.txt -r requirements-dev.txt
+pip install -e .
+```
+
+The runtime ML stack includes:
 
 ```text
 numpy==1.26.4
@@ -202,7 +251,22 @@ opencv-python==4.10.0.84
 tensorflow==2.15.1
 keras==2.15.0
 deepface==0.0.93
+PyYAML>=6.0.1
 ```
+
+See [docs/IMPORT_AUDIT.md](docs/IMPORT_AUDIT.md) for import path troubleshooting.
+
+### PAD dataset tools (optional)
+
+After install, from the repository root:
+
+```powershell
+python -m tools.collect_pad_dataset
+python -m tools.generate_manifest
+python -m tools.qc_dataset
+```
+
+Or use console scripts: `collect-pad-dataset`, `generate-pad-manifest`, `qc-pad-dataset`.
 
 ## Running the App
 
@@ -427,7 +491,8 @@ the application responsive.
 
 | Problem | Likely Cause | Fix |
 | --- | --- | --- |
-| `No matching distribution found for tensorflow==2.15.1` | Wrong Python version | Use Python `3.11.x` |
+| `No matching distribution found for tensorflow==2.15.1` | Python 3.12+ with TF 2.15 pins | Use Python **3.11**: `py -3.11 -m venv .venv` — see [docs/python_environment_audit.md](docs/python_environment_audit.md) |
+| `ModuleNotFoundError: No module named 'tensorflow.keras'` (DeepFace) | DeepFace 0.0.93 + TF 2.15 legacy Keras flag | Run `python scripts/patch_deepface_tf215.py` — see [docs/deepface_runtime_rootcause.md](docs/deepface_runtime_rootcause.md) |
 | Keras or `tf-keras` errors | TensorFlow/Keras version mismatch | Use the pinned `requirements.txt` |
 | Webcam does not open | Camera index or permissions issue | Close other camera apps, check permissions, try camera index `1` |
 | First DeepFace run is slow | Model weights are downloading | Wait for the first model download to finish |
@@ -531,5 +596,5 @@ python src\recognize.py
 
 ## Disclaimer
 
-This project is intended for educational use. Do not rely on it as the only
-security mechanism for protecting real devices, accounts, or sensitive data.
+This project is for learning, demos, and portfolio use.
+It is not a production-grade operating system lock or biometric security product.

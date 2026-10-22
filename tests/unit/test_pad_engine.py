@@ -129,6 +129,19 @@ class TestPadSession:
         session.reset()
         assert session.needs_more_frames() is True
 
+    def test_single_image_pad_default_settings_is_inconclusive(
+        self, bright_frame: np.ndarray
+    ) -> None:
+        """
+        A single still image cannot establish temporal motion evidence.
+        Under default PAD settings (min_frames_passive=8), check_single_image_pad
+        must return INCONCLUSIVE with reason_code 'too_few_frames'.
+        """
+        result = check_single_image_pad(image=bright_frame)
+        assert result.outcome == PadOutcome.INCONCLUSIVE
+        assert result.reason_code == "too_few_frames"
+        assert result.frames_analyzed < PAD_SETTINGS.min_frames_passive
+
 
 @pytest.mark.unit
 @pytest.mark.pad

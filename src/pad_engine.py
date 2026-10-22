@@ -225,7 +225,7 @@ class HeuristicPassiveScorer:
 
         scores: list[float] = []
         for pad_frame in frames:
-            scores.append(self._score_single_frame(pad_frame.image))
+            scores.append(self._score_single_frame(pad_frame.image, pad_frame.face_box))
 
         motion_bonus = self._motion_score(frames)
         combined = float(np.clip(np.mean(scores) * 0.75 + motion_bonus * 0.25, 0.0, 1.0))
@@ -239,9 +239,24 @@ class HeuristicPassiveScorer:
     def metadata(self) -> ModelInfo:
         return ModelInfo(model_id=self.model_id, model_version=self.model_version)
 
-    def _extract_roi(self, image: Any) -> np.ndarray:
+    def _extract_roi(
+        self,
+        image: Any,
+        face_box: tuple[int, int, int, int] | None = None,
+    ) -> np.ndarray:
         if image is None or not hasattr(image, "shape"):
             return np.zeros((32, 32), dtype=np.uint8)
+
+        if face_box is not None:
+            x, y, w, h = face_box
+            H, W = image.shape[:2]
+            x1 = max(0, int(x))
+            y1 = max(0, int(y))
+            x2 = min(W, int(x + w))
+            y2 = min(H, int(y + h))
+            if x2 > x1 and y2 > y1:
+                roi = image[y1:y2, x1:x2]
+                return cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) if len(roi.shape) == 3 else roi
 
         height, width = image.shape[:2]
         top = height // 4
@@ -256,38 +271,100 @@ class HeuristicPassiveScorer:
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) if len(roi.shape) == 3 else roi
         return gray
 
-    def _score_single_frame(self, image: Any) -> float:
-        gray = self._extract_roi(image)
+    def _extract_color_roi(
+        self,
+        image: Any,
+        face_box: tuple[int, int, int, int] | None = None,
+    ) -> np.ndarray:
+        if image is None or not hasattr(image, "shape"):
+            return np.zeros((32, 32, 3), dtype=np.uint8)
+
+        if face_box is not None:
+            x, y, w, h = face_box
+            H, W = image.shape[:2]
+            x1 = max(0, int(x))
+            y1 = max(0, int(y))
+            x2 = min(W, int(x + w))
+            y2 = min(H, int(y + h))
+            if x2 > x1 and y2 > y1:
+                roi = image[y1:y2, x1:x2]
+                return roi if roi.ndim == 3 else cv2.cvtColor(roi, cv2.COLOR_GRAY2BGR)
+
+        height, width = image.shape[:2]
+        top = height // 4
+        bottom = height - height // 4
+        left = width // 4
+        right = width - width // 4
+        roi = image[top:bottom, left:right]
+
+        if roi.size == 0:
+            return np.zeros((32, 32, 3), dtype=np.uint8)
+
+        return roi if roi.ndim == 3 else cv2.cvtColor(roi, cv2.COLOR_GRAY2BGR)
+
+    def _score_single_frame(
+        self,
+        image: Any,
+        face_box: tuple[int, int, int, int] | None = None,
+    ) -> float:
+        if image is None or not hasattr(image, "shape") or image.size == 0:
+            return 0.0
+
+        gray = self._extract_roi(image, face_box)
         laplacian_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-        # Very flat regions (some prints/screens) score lower; live faces tend higher.
-        texture_score = np.clip(laplacian_var / 120.0, 0.0, 1.0)
+        # Live human webcam faces typically have laplacian_var in 35-150.
+        # Flat photo prints or blurred displays fall near 0-15.
+        texture_score = float(np.clip((laplacian_var - 12.0) / 60.0, 0.0, 1.0))
 
         if len(image.shape) == 3:
-            channel_std = [float(image[:, :, index].std()) for index in range(3)]
-            std_spread = max(channel_std) - min(channel_std)
-            color_score = np.clip(std_spread / 25.0, 0.0, 1.0)
+            color_roi = self._extract_color_roi(image, face_box)
+            b_mean = float(color_roi[:, :, 0].mean())
+            g_mean = float(color_roi[:, :, 1].mean())
+            r_mean = float(color_roi[:, :, 2].mean())
+            # Skin tone reflectance under visible spectrum typically has R >= B and R >= G*0.85
+            skin_reflectance = 1.0 if (r_mean >= b_mean and r_mean >= g_mean * 0.85) else 0.4
+
+            contrast = float(gray.std())
+            contrast_score = float(np.clip(contrast / 30.0, 0.0, 1.0))
+
+            ch_std = [float(color_roi[:, :, i].std()) for i in range(3)]
+            std_spread = max(ch_std) - min(ch_std)
+            spread_score = float(np.clip(std_spread / 8.0, 0.0, 1.0))
+
+            color_score = float(
+                np.clip(contrast_score * 0.5 + spread_score * 0.3 + skin_reflectance * 0.2, 0.0, 1.0)
+            )
         else:
             color_score = 0.5
 
-        return float(np.clip(texture_score * 0.7 + color_score * 0.3, 0.0, 1.0))
+        return float(np.clip(texture_score * 0.65 + color_score * 0.35, 0.0, 1.0))
 
     def _motion_score(self, frames: Sequence[PadFrame]) -> float:
         if len(frames) < 2:
             return 0.4
 
         centroids: list[float] = []
-        for pad_frame in frames[-6:]:
-            gray = self._extract_roi(pad_frame.image)
-            moments = cv2.moments(gray)
-            if moments["m00"] <= 0:
-                continue
-            centroids.append(float(moments["m10"] / moments["m00"]))
+        for pad_frame in frames[-8:]:
+            if pad_frame.face_box is not None:
+                centroids.append(float(pad_frame.face_box[0] + pad_frame.face_box[2] / 2.0))
+            else:
+                gray = self._extract_roi(pad_frame.image)
+                moments = cv2.moments(gray)
+                if moments["m00"] <= 0:
+                    continue
+                centroids.append(float(moments["m10"] / moments["m00"]))
 
         if len(centroids) < 2:
             return 0.4
 
         movement = float(np.std(centroids))
-        return float(np.clip(movement / 15.0, 0.0, 1.0))
+        # A completely stationary fixture (print on stand) has movement < 0.3 px.
+        # Live human micro-movements (breathing, posture) range from 0.4 to 6.0 px.
+        if movement < 0.3:
+            return 0.15
+        if movement < 1.0:
+            return float(np.clip(0.35 + (movement - 0.3) * 0.35, 0.35, 0.60))
+        return float(np.clip(0.60 + (movement - 1.0) / 8.0 * 0.40, 0.60, 1.0))
 
 
 @dataclass
@@ -332,7 +409,11 @@ class _ActiveChallengeController:
             )
             return self.challenge
 
-        centroid_x = self._centroid_x(pad_frame.image)
+        if pad_frame.face_box is not None:
+            centroid_x: float | None = float(pad_frame.face_box[0] + pad_frame.face_box[2] / 2.0)
+        else:
+            centroid_x = self._centroid_x(pad_frame.image)
+
         if centroid_x is not None:
             if self._start_centroid_x is None:
                 self._start_centroid_x = centroid_x
@@ -477,6 +558,14 @@ class PadSession:
 
     def current_challenge(self) -> PadChallenge | None:
         return self._active.challenge
+
+    def active_start_centroid_x(self) -> float | None:
+        """Return the horizontal centroid recorded at active challenge start."""
+        return self._active._start_centroid_x
+
+    def active_max_delta_x(self) -> float:
+        """Return the maximum horizontal displacement reached during active challenge."""
+        return self._active._max_delta_x
 
     def evaluate_final(self) -> PadResult:
         started = time.monotonic()

@@ -14,6 +14,7 @@ AI logic, webcam logic, and recognition decisions should stay in their own modul
 
 from __future__ import annotations
 
+import io
 import pickle
 import re
 from datetime import datetime
@@ -22,10 +23,24 @@ from typing import Any
 
 try:
     # Preferred import when running the project from app.py.
-    from src.config import LOGGING_SETTINGS, PATH_SETTINGS, STORAGE_SETTINGS
+    from src.config import (
+        DEFAULT_OWNER_NAME,
+        ENV_OWNER_NAME,
+        LOGGING_SETTINGS,
+        PATH_SETTINGS,
+        STORAGE_SETTINGS,
+        resolve_owner_name,
+    )
 except ModuleNotFoundError:
     # Fallback import when running this file directly as: python src/utils.py
-    from config import LOGGING_SETTINGS, PATH_SETTINGS, STORAGE_SETTINGS
+    from config import (
+        DEFAULT_OWNER_NAME,
+        ENV_OWNER_NAME,
+        LOGGING_SETTINGS,
+        PATH_SETTINGS,
+        STORAGE_SETTINGS,
+        resolve_owner_name,
+    )
 
 
 # Path settings are centralized in src/config.py.
@@ -40,10 +55,86 @@ MODELS_DIR = PATH_SETTINGS.models_dir
 # File format settings used by image and embedding helpers.
 DEFAULT_IMAGE_EXTENSION = STORAGE_SETTINGS.default_image_extension
 SUPPORTED_IMAGE_EXTENSIONS = STORAGE_SETTINGS.supported_image_extensions
+# Re-export for modules that import level from utils (canonical: LOGGING_SETTINGS).
 LOGGING_LEVEL = LOGGING_SETTINGS.level
 
 # Internal marker used to detect whether a default value was provided.
 _MISSING = object()
+
+
+# ---------------------------------------------------------------------------
+# Secure pickle deserialization (SEC-002)
+# ---------------------------------------------------------------------------
+
+# Exhaustive set of (module, name) pairs that the safe unpickler allows.
+# Face Lock .pkl files contain only plain Python primitives and lists of floats.
+_SAFE_TYPES: frozenset[tuple[str, str]] = frozenset(
+    {
+        # Built-in containers
+        ("builtins", "dict"),
+        ("builtins", "list"),
+        ("builtins", "tuple"),
+        # Built-in scalars
+        ("builtins", "str"),
+        ("builtins", "int"),
+        ("builtins", "float"),
+        ("builtins", "bool"),
+        # datetime.datetime is included because embedding records store
+        # an ISO-formatted creation timestamp via datetime.now().isoformat().
+        # The value is serialised as a plain str, but older pickle files may
+        # have serialised the datetime object itself.
+        ("datetime", "datetime"),
+    }
+)
+
+
+class RestrictedUnpicklingError(ValueError):
+    """
+    Raised when a pickle stream tries to instantiate a type that is not on
+    the explicit allow-list.
+
+    Inherits from ValueError so callers that catch ValueError (e.g. schema
+    validation in ai_engine) continue to behave correctly.
+    """
+
+
+class _SafeUnpickler(pickle.Unpickler):
+    """
+    A restricted ``pickle.Unpickler`` that only allows pure-data types.
+
+    Any attempt to deserialise an object whose ``(module, name)`` pair is not
+    in ``_SAFE_TYPES`` raises ``RestrictedUnpicklingError`` immediately, before
+    any code is executed.  This blocks every known pickle RCE gadget (os.system,
+    subprocess, reduce-based gadgets, importlib tricks, etc.).
+
+    Permitted types
+    ---------------
+    - ``builtins``: dict, list, tuple, str, int, float, bool
+    - ``datetime``: datetime  (legacy compatibility)
+
+    Blocked examples
+    ----------------
+    - ``os.system``, ``subprocess.Popen``  → arbitrary command execution
+    - ``__builtin__.eval``                 → code injection
+    - Any user-defined / third-party class → import-based gadgets
+    """
+
+    def find_class(self, module: str, name: str) -> Any:
+        """
+        Intercept every GLOBAL / STACK_GLOBAL opcode in the pickle stream.
+
+        Called once for each class reference encountered during unpickling.
+        Raises ``RestrictedUnpicklingError`` if the type is not explicitly
+        allowed.
+        """
+        if (module, name) in _SAFE_TYPES:
+            # Delegate to the standard resolver only for permitted types.
+            return super().find_class(module, name)
+
+        raise RestrictedUnpicklingError(
+            f"Pickle load blocked: type '{module}.{name}' is not permitted. "
+            "Only plain Python data types are allowed in Face Lock embedding files."
+        )
 
 
 def ensure_directory(directory_path: str | Path) -> Path:
@@ -125,6 +216,10 @@ def save_pickle(data: Any, file_path: str | Path) -> Path:
     Pickle is useful for ML projects because it can store Python objects such as
     lists, dictionaries, NumPy arrays, and face embeddings.
 
+    Security:
+        Only load pickles created by this application from a trusted ``encodings/``
+        directory. Untrusted pickle files can execute arbitrary code on load.
+
     Args:
         data: Python object to save.
         file_path: Destination .pkl file path.
@@ -147,7 +242,14 @@ def save_pickle(data: Any, file_path: str | Path) -> Path:
 
 def load_pickle(file_path: str | Path, default: Any = _MISSING) -> Any:
     """
-    Load Python data from a pickle file.
+    Load Python data from a pickle file using a restricted unpickler.
+
+    Security (SEC-002):
+        Only plain Python data types are permitted during deserialization:
+        dict, list, tuple, str, int, float, bool, and datetime.datetime.
+        Any attempt to load a class outside this allow-list raises
+        ``RestrictedUnpicklingError``, preventing arbitrary code execution
+        even when a malicious ``.pkl`` file is placed in ``encodings/``.
 
     Args:
         file_path: Source .pkl file path.
@@ -158,6 +260,7 @@ def load_pickle(file_path: str | Path, default: Any = _MISSING) -> Any:
 
     Raises:
         FileNotFoundError: If the file is missing and no default is provided.
+        RestrictedUnpicklingError: If the pickle stream references a blocked type.
     """
     # Convert the source path into a Path object.
     path = Path(file_path)
@@ -170,7 +273,10 @@ def load_pickle(file_path: str | Path, default: Any = _MISSING) -> Any:
 
     # "rb" means read binary, which is required for pickle files.
     with path.open("rb") as file:
-        return pickle.load(file)
+        # _SafeUnpickler replaces the unrestricted pickle.load() call.
+        # It raises RestrictedUnpicklingError for any non-allowed type,
+        # which prevents RCE gadgets from executing during deserialization.
+        return _SafeUnpickler(file).load()
 
 
 def clean_name(value: str) -> str:
@@ -243,8 +349,6 @@ def print_status(message: str, level: str = "info") -> None:
         "warning": "WARNING",
         "error": "ERROR",
     }
-
-    # LOGGING_LEVEL is reserved for the future logging module setup.
 
     # Use INFO if an unknown level is passed.
     label = labels.get(level.lower(), "INFO")

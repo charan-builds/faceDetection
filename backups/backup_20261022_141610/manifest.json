@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-10-22T14:16:21.519952",
+  "project_root": "C:\\face_detection",
+  "total_files": 11,
+  "files": {
+    "encodings\\owner.pkl": {
+      "size": 37812,
+      "sha256": "20b8cc1b11d966236ebfd67184a58c7c0699c55c8d9ac8995119e41b124a2bd1"
+    },
+    "data\\owner\\owner_20261017_064309_344492.jpg": {
+      "size": 317102,
+      "sha256": "9296c539e14b25dc182b09fa167ae000c0fb235f92cc79631dd7150ef7c843d0"
+    },
+    "data\\owner\\owner_20261017_064309_979872.jpg": {
+      "size": 321790,
+      "sha256": "80c1e7632c9edf79d38cfe4cdbafa5a7bc2150ca78dad9e3a89bf315a5f3280e"
+    },
+    "data\\owner\\owner_20261017_064310_526525.jpg": {
+      "size": 325391,
+      "sha256": "95831958f84d7fb2f7f0ffdc3c144c47cedec23681aefc91f3951ec89faff146"
+    },
+    "data\\owner\\owner_20261017_064311_438329.jpg": {
+      "size": 322024,
+      "sha256": "d44bd88b0cfc89ca9ec2ee443a43c831c214600937b3bb09a0c6b0a5d6decc8b"
+    },
+    "data\\owner\\owner_20261017_064312_126458.jpg": {
+      "size": 332983,
+      "sha256": "7c20d16a416fe6e66246c215a03f7dd1dd4f27b30c331d8af8f96d28b2698494"
+    },
+    "data\\owner\\owner_20261017_064316_104112.jpg": {
+      "size": 330386,
+      "sha256": "6040dff4bc34ad55ba038e11fe0086acd000e6ae9159e3670897b87911f3cfe9"
+    },
+    "data\\owner\\owner_20261017_064318_334483.jpg": {
+      "size": 331032,
+      "sha256": "5f8762475aedfca2bdaffb08342b97d176978ec2e060c97afdb031a9d6506c27"
+    },
+    "data\\owner\\owner_20261017_064319_308225.jpg": {
+      "size": 330920,
+      "sha256": "0de8e987228b13783a795d0924552e4e6d40f4141f6803f05db2ff5c594f40eb"
+    },
+    "data\\owner\\owner_20261017_064320_619328.jpg": {
+      "size": 327913,
+      "sha256": "501adbfdfaacd12d6bd480a8977f45d652cf34e343ef21dca88f97b5e3e22b9f"
+    },
+    "data\\owner\\owner_20261017_064321_847285.jpg": {
+      "size": 321406,
+      "sha256": "8607f80d24d67c8273fceeeea72d50d1178c3edb040bf5e58b907aa946ae51ac"
+    }
+  }
+}

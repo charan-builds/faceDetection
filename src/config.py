@@ -93,6 +93,37 @@ class AISettings:
     align_faces: bool = True
 
 
+ENV_OWNER_NAME: Final[str] = "FACE_LOCK_OWNER_NAME"
+DEFAULT_OWNER_NAME: Final[str] = "owner"
+
+
+def resolve_owner_name(raw_name: str | None = None) -> str:
+    """
+    Resolve and normalize the configured owner name.
+
+    Precedence:
+    1. raw_name argument if provided, else os.environ.get("FACE_LOCK_OWNER_NAME").
+    2. Fallback to DEFAULT_OWNER_NAME ("owner") if unset, empty, or whitespace-only.
+
+    Validation & Normalization:
+    - Normalizes consistently with clean_name() (lowercase, spaces to underscores,
+      retaining only alphanumeric characters, underscores, and hyphens).
+    - If the raw value contains no valid characters (producing an empty string or "unknown"),
+      it safely falls back to DEFAULT_OWNER_NAME ("owner") so an invalid environment variable
+      can never accidentally match an enrolled user or lock out the system.
+    """
+    import os
+    import re
+
+    raw = os.environ.get(ENV_OWNER_NAME, "") if raw_name is None else raw_name
+    cleaned = raw.strip().lower().replace(" ", "_")
+    cleaned = re.sub(r"[^a-z0-9_-]", "", cleaned)
+
+    if not cleaned or cleaned == "unknown":
+        return DEFAULT_OWNER_NAME
+    return cleaned
+
+
 @dataclass(frozen=True)
 class RecognitionSettings:
     """
@@ -109,6 +140,9 @@ class RecognitionSettings:
 
     # Frames darker than this average brightness are rejected before inference.
     brightness_threshold: float = 45.0
+
+    # The single identity allowed to unlock the system (1:1 Verification).
+    owner_name: str = field(default_factory=resolve_owner_name)
 
 
 @dataclass(frozen=True)
@@ -160,10 +194,17 @@ class RegistrationSettings:
     window_name: str = "Face Lock Registration"
 
     # Number of images to collect for a new user registration.
-    image_count: int = 10
+    image_count: int = 20
 
     # Reject registration if fewer than this many usable embeddings are created.
     minimum_embeddings: int = 3
+
+    # Automatic dataset collection settings:
+    auto_capture_interval_seconds: float = 0.35
+    min_face_size_ratio: float = 0.15
+    max_face_size_ratio: float = 0.85
+    min_sharpness_variance: float = 40.0
+    min_frame_difference: float = 6.0
 
 
 @dataclass(frozen=True)
@@ -232,7 +273,7 @@ class PADSettings:
     max_challenges_per_unlock: int = 1
 
     hardware_profile: str = "rgb_only"
-    allow_virtual_camera: bool = True
+    allow_virtual_camera: bool = False
 
     passive_model_id: str = "heuristic_rgb_v1"
     log_passive_scores: bool = False

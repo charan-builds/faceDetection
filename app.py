@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Callable
 
+from src.ai_engine import DEFAULT_MODEL_NAME, load_face_model
+from src.operator_auth import verify_operator_pin
 from src.register import register_user
 from src.recognize import recognize_live
 from src.utils import ensure_project_folders, print_status
@@ -99,8 +101,21 @@ def run_safely(action_name: str, action: Callable[[], object]) -> object | None:
 def handle_registration() -> None:
     """
     Start the registration workflow and print a short result summary.
+
+    The operator must authenticate before registration begins.
+    In demo mode (no PIN hash configured) a warning is logged and the
+    operation is allowed through unconditionally.
     """
     print_status("Opening registration workflow.")
+
+    # Operator authentication gate — protects enrollment from unauthorized use.
+    # verify_operator_pin() handles demo mode, PIN prompting, and audit logging.
+    if not verify_operator_pin():
+        print_status(
+            "Registration denied: operator authentication failed.",
+            level="error",
+        )
+        return
 
     # register_user owns username input, webcam capture, and embedding saving.
     result = run_safely("Registration", register_user)
@@ -167,12 +182,51 @@ def handle_menu_choice(choice: str) -> bool:
     return True
 
 
+def warmup_model(model_name: str = DEFAULT_MODEL_NAME) -> None:
+    """
+    Pre-load the DeepFace recognition model at startup.
+
+    DeepFace downloads and caches model weights on first use. Loading the
+    model here — before the user opens the menu — moves that one-time cost
+    to startup rather than the first recognition or registration attempt,
+    eliminating the visible freeze on first use.
+
+    If the load fails (DeepFace not installed, network unavailable, or any
+    other error) a warning is printed and startup continues normally.
+    Recognition will still work; it will just pay the warm-up cost on first
+    call instead.
+
+    Args:
+        model_name: The DeepFace model to pre-load (default: Facenet512).
+    """
+    print_status(f"Loading face recognition model ({model_name})…")
+
+    try:
+        load_face_model(model_name)
+        print_status(f"Model ready: {model_name}.", level="success")
+    except Exception as error:
+        # A warm-up failure is non-fatal — the app can still operate.
+        # The first recognition attempt will trigger the load again.
+        print_status(
+            f"Model pre-load skipped: {error}. "
+            "Recognition will load the model on first use.",
+            level="warning",
+        )
+
+
 def run_app() -> None:
     """
     Run the main application loop.
     """
+    from src.integrity import enforce_strict_mode_policy
+    enforce_strict_mode_policy(require_operator_auth=True)
+
     # Create required folders once when the app starts.
     ensure_project_folders()
+
+    # Pre-load the face recognition model so the first recognition or
+    # registration attempt does not pay the cold-start penalty.
+    warmup_model()
 
     # Keep showing the menu until the user chooses Exit.
     keep_running = True

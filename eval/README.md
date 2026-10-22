@@ -25,7 +25,11 @@ Before adopting ONNX or other passive scorers, the project needs:
 
 **Phase E2 (metrics):** `eval/metrics/`, `eval/harness/outcome_mapper.py`.
 
-**Phase E3 (harness):** `run_pad_eval.py`, `clip_loader.py`, `settings_snapshot.py` — **no markdown reports or baselines yet**.
+**Phase E3 (harness):** `run_pad_eval.py`, `clip_loader.py`, `settings_snapshot.py`.
+
+**Phase E4 (reporting):** `report_builder.py`, `baseline_compare.py`, `tier_gate_validator.py` — consumes E3 artifacts only.
+
+**First lab dataset:** see [`docs/FACE_LOCK_V1_COLLECTION_GUIDE.md`](docs/FACE_LOCK_V1_COLLECTION_GUIDE.md) for capture SOP, sample counts, QC, and baseline sign-off.
 
 ---
 
@@ -40,6 +44,7 @@ eval/
 ├── fixtures/                 ← tiny clips for CI (manifest committed)
 ├── harness/                  ← outcome_mapper (E2); run_pad_eval (E3+)
 ├── metrics/                  ← APCER/BPCER, confusion, latency (E2)
+├── reporting/                ← REPORT.md builder, baseline compare (E4)
 ├── reports/                  ← generated run outputs + templates
 └── baselines/                ← approved baseline summary JSON files
 ```
@@ -91,8 +96,15 @@ Tier targets (Standard): APCER ≤ 5% (PA-01–03 pooled), BPCER ≤ 5%.
      --collection-root eval/fixtures `
      --output-dir eval/reports/runs
    ```
-4. Review report from `reports/template/report_template.md`.
-5. On approval, copy `summary.json` to `baselines/`.
+
+4. Generate report (Phase E4):
+
+   ```powershell
+   python -m eval.reporting.report_builder `
+     --run-dir eval/reports/runs/<run_id>
+   ```
+
+5. On approval, copy `summary.json` to `eval/baselines/<model_id>_<tier>.json`.
 
 ---
 
@@ -121,5 +133,6 @@ Tier targets (Standard): APCER ≤ 5% (PA-01–03 pooled), BPCER ≤ 5%.
 | **E1** | Scaffold (protocols, datasets template, reports) |
 | **E2** | Metrics: outcome mapper, APCER/BPCER, confusion, latency |
 | **E3** | Harness: protocol/manifest load, clip loader, `run_pad_eval`, snapshots |
-| E4 | Markdown reports, baseline comparison, first lab sign-off |
+| **E4** | Reporting: `REPORT.md`, tier gate validation, baseline regression |
+| E5 | CI orchestration, lab sign-off workflow, optional summary enrichment |
 | E4 | CI fixture regression + ONNX comparison protocol |

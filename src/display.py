@@ -28,12 +28,12 @@ try:
         WEBCAM_SETTINGS,
     )
     from src.logging_config import get_logger, log_event
-    from src.pad_engine import PadChallenge
+    from src.pad_engine import ChallengeState, PadChallenge
 except ModuleNotFoundError:
     # Fallback imports when running this file directly as: python src/display.py
     from config import AI_SETTINGS, DISPLAY_SETTINGS, RECOGNITION_SETTINGS, WEBCAM_SETTINGS
     from logging_config import get_logger, log_event
-    from pad_engine import PadChallenge
+    from pad_engine import ChallengeState, PadChallenge
 
 
 BgrColor = tuple[int, int, int]
@@ -52,16 +52,71 @@ COLOR_SHADOW = DISPLAY_SETTINGS.color_shadow
 def get_status_color(status: dict[str, Any]) -> BgrColor:
     """
     Choose a display color from a recognition status dictionary.
+    Supports explicit states: VERIFIED, DETECTING FACE, CHECKING LIVENESS,
+    VERIFYING IDENTITY, NOT VERIFIED, TRY AGAIN, as well as legacy
+    ACCESS GRANTED, ACCESS DENIED, and WAITING.
     """
     if status.get("access_granted"):
         return COLOR_GRANTED
 
+    state = str(status.get("state", "")).upper()
     primary_text = str(status.get("primary_text", "")).upper()
+    effective = state or primary_text
 
-    if primary_text == "WAITING":
+    if effective in ("VERIFIED",):
+        return COLOR_GRANTED
+
+    if effective in ("WAITING", "DETECTING FACE"):
         return COLOR_INFO
 
+    if (
+        effective in ("CHECKING LIVENESS", "VERIFYING IDENTITY", "TRY AGAIN")
+        or "LIVENESS VERIFIED" in effective
+    ):
+        return COLOR_WARNING
+
     return COLOR_DENIED
+
+
+def resolve_display_state(status: dict[str, Any]) -> str:
+    """
+    Resolve the explicit UI state label for the live preview.
+    States: DETECTING FACE, CHECKING LIVENESS, VERIFYING IDENTITY,
+            VERIFIED, NOT VERIFIED, TRY AGAIN.
+    """
+    state = status.get("state")
+    if state:
+        state_str = str(state).upper()
+        if state_str == "VERIFIED":
+            if status.get("access_granted") and status.get("liveness_passed") is True:
+                return "VERIFIED"
+            return "NOT VERIFIED"
+        return state_str
+
+    if status.get("access_granted") and status.get("liveness_passed") is True:
+        return "VERIFIED"
+
+    if "LIVENESS VERIFIED" in primary or "LIVENESS VERIFIED" in str(state or "").upper():
+        return "LIVENESS VERIFIED — LOOK AT CAMERA"
+
+    if primary == "WAITING":
+        if "liveness" in secondary or "challenge" in secondary:
+            return "CHECKING LIVENESS"
+        if "identity" in secondary or "matching" in secondary:
+            return "VERIFYING IDENTITY"
+        return "DETECTING FACE"
+
+    if primary in ("ACCESS GRANTED", "VERIFIED"):
+        if status.get("liveness_passed") is True:
+            return "VERIFIED"
+        return "NOT VERIFIED"
+
+    if primary in ("ACCESS DENIED", "NOT VERIFIED"):
+        if "try again" in secondary or "timeout" in secondary or "inconclusive" in secondary:
+            return "TRY AGAIN"
+        return "NOT VERIFIED"
+
+    return primary or "DETECTING FACE"
 
 
 def draw_text(
@@ -140,6 +195,8 @@ def draw_pad_hint(frame: Any, challenge: PadChallenge | None) -> None:
     """
     if frame is None or challenge is None:
         return
+    if getattr(challenge, "state", None) != ChallengeState.IN_PROGRESS:
+        return
 
     text = get_challenge_prompt_text(challenge.instruction_key)
     draw_warning(frame=frame, text=text, line_number=2)
@@ -160,9 +217,10 @@ def draw_status_overlay(
     status: dict[str, Any],
     frame_skip: int,
     cooldown_seconds: float,
+    face_box: tuple[int, int, int, int] | None = None,
 ) -> None:
     """
-    Draw recognition status text on a live webcam frame.
+    Draw recognition status text and optional face bounding box on a live webcam frame.
     """
     if frame is None or not hasattr(frame, "shape"):
         log_event(
@@ -174,12 +232,24 @@ def draw_status_overlay(
         return
 
     margin_x = DISPLAY_SETTINGS.text_margin_x
+    color = get_status_color(status)
+
+    # Draw face bounding box when detected
+    if face_box is not None:
+        draw_bounding_box(frame, face_box, color=color, thickness=2)
+
+    # Prefer explicit state if provided, otherwise fallback to primary_text
+    display_title = str(status.get("state") or status.get("primary_text", "WAITING"))
+    # Fail-closed guard: only allow VERIFIED if both liveness and access granted
+    if display_title == "VERIFIED" and not (status.get("access_granted") and status.get("liveness_passed") is True):
+        display_title = "NOT VERIFIED"
+        color = COLOR_DENIED
 
     draw_text(
         frame=frame,
-        text=str(status.get("primary_text", "WAITING")),
+        text=display_title,
         position=(margin_x, DISPLAY_SETTINGS.primary_text_y),
-        color=get_status_color(status),
+        color=color,
         scale=DISPLAY_SETTINGS.primary_scale,
         thickness=2,
     )

@@ -13,12 +13,16 @@ import pytest
 from src.config import (
     AI_SETTINGS,
     CONFIG,
+    DEFAULT_OWNER_NAME,
     DISPLAY_SETTINGS,
+    ENV_OWNER_NAME,
     LOGGING_SETTINGS,
     PAD_SETTINGS,
     PATH_SETTINGS,
     RECOGNITION_SETTINGS,
+    RecognitionSettings,
     WEBCAM_SETTINGS,
+    resolve_owner_name,
     resolve_project_root,
 )
 
@@ -100,3 +104,58 @@ class TestAppConfigDefaults:
 
     def test_webcam_quit_key_is_single_character(self) -> None:
         assert len(WEBCAM_SETTINGS.quit_key) == 1
+
+
+# ---------------------------------------------------------------------------
+# Owner Name Configuration (FACE_LOCK_OWNER_NAME)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestOwnerNameConfiguration:
+    def test_default_owner_name_when_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When FACE_LOCK_OWNER_NAME is absent from the environment, default is 'owner'."""
+        monkeypatch.delenv(ENV_OWNER_NAME, raising=False)
+        assert resolve_owner_name() == DEFAULT_OWNER_NAME
+        assert resolve_owner_name() == "owner"
+
+    def test_default_owner_name_when_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When FACE_LOCK_OWNER_NAME is empty string, default is 'owner'."""
+        monkeypatch.setenv(ENV_OWNER_NAME, "")
+        assert resolve_owner_name() == DEFAULT_OWNER_NAME
+
+    def test_default_owner_name_when_whitespace_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When FACE_LOCK_OWNER_NAME is whitespace only, default is 'owner'."""
+        monkeypatch.setenv(ENV_OWNER_NAME, "    ")
+        assert resolve_owner_name() == DEFAULT_OWNER_NAME
+
+    def test_valid_owner_name_normalized(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Valid standard username is preserved."""
+        monkeypatch.setenv(ENV_OWNER_NAME, "charan")
+        assert resolve_owner_name() == "charan"
+
+    def test_mixed_case_and_spaces_normalized(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Mixed-case with spaces is normalized consistently with clean_name()."""
+        monkeypatch.setenv(ENV_OWNER_NAME, "  Charan Kumar  ")
+        assert resolve_owner_name() == "charan_kumar"
+
+    def test_alphanumeric_hyphens_underscores_allowed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Allowed characters (letters, numbers, _, -) are preserved."""
+        monkeypatch.setenv(ENV_OWNER_NAME, "alice-01_v2")
+        assert resolve_owner_name() == "alice-01_v2"
+
+    def test_invalid_symbols_safely_fallback_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Values containing only invalid symbols fall back to DEFAULT_OWNER_NAME, never 'unknown'."""
+        monkeypatch.setenv(ENV_OWNER_NAME, "!@#$%^&*")
+        assert resolve_owner_name() == DEFAULT_OWNER_NAME
+        assert resolve_owner_name() != "unknown"
+
+    def test_unknown_identity_safely_fallback_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Literal 'unknown' string safely falls back to DEFAULT_OWNER_NAME to avoid accidental match."""
+        monkeypatch.setenv(ENV_OWNER_NAME, "unknown")
+        assert resolve_owner_name() == DEFAULT_OWNER_NAME
+
+    def test_recognition_settings_reflects_resolved_owner(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """RecognitionSettings instances resolve the owner_name via default_factory."""
+        monkeypatch.setenv(ENV_OWNER_NAME, "admin_user")
+        settings = RecognitionSettings()
+        assert settings.owner_name == "admin_user"
